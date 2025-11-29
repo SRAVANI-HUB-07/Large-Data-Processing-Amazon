@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.log
+venv39/
+venv/
+venv39/
+venv/
+data/raw/amazon_books.json.gz
+data/raw/
+*.gz
+data/raw/amazon_books.json.gz

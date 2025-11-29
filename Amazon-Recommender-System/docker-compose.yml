@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  spark-app:
+    image: bitnami/spark:latest
+    container_name: amazon-recommender
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: spark-worker
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-app:7077
+      - SPARK_WORKER_MEMORY=4G
+    depends_on:
+      - spark-app
