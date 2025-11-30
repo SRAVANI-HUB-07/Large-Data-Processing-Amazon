@@ -76,7 +76,7 @@ def run_interactive_mode(app):
             elif cmd_type == 'recommend':
                 if len(command) > 1:
                     user_id = command[1]
-                    n = int(command[2]) if len(command) > 2 else 5
+                    n = int(command[2]) if len(command) > 2 else 10
                     print(f"Getting recommendations for user {user_id}...")
                     recs = app.get_recommendations(user_id=user_id, n=n)
                     if recs.count() > 0:
@@ -85,13 +85,13 @@ def run_interactive_mode(app):
                     else:
                         print("No recommendations found")
                 else:
-                    print("Usage: recommend [user_id] [n=5]")
+                    print("Usage: recommend [user_id] [n=10]")
                     print("Example: recommend CUST_00001 10")
                     
             elif cmd_type == 'similar':
                 if len(command) > 1:
                     product_id = command[1]
-                    n = int(command[2]) if len(command) > 2 else 5
+                    n = int(command[2]) if len(command) > 2 else 10
                     print(f"Finding books similar to {product_id}...")
                     similar = app.get_recommendations(product_id=product_id, n=n)
                     if similar.count() > 0:
@@ -100,8 +100,8 @@ def run_interactive_mode(app):
                     else:
                         print("No similar books found")
                 else:
-                    print("Usage: similar [product_id] [n=5]")
-                    print("Example: similar 014241543X 8")
+                    print("Usage: similar [product_id] [n=10]")
+                    print("Example: similar 014241543X 10")
                     
             elif cmd_type == 'stats':
                 print("Loading category statistics...")
@@ -114,7 +114,8 @@ def run_interactive_mode(app):
                     print(f"Getting details for product {product_id}...")
                     product = app.get_product_details(product_id)
                     if product.count() > 0:
-                        product.select("product_id", "title", "category", "price", "description", "average_rating", "sales_rank").show(truncate=100)
+                        product.select("product_id", "title", "category", "price", "description", 
+                                     "average_rating", "review_count", "sales_rank").show(truncate=100)
                     else:
                         print("Product not found")
                 else:
@@ -128,12 +129,23 @@ def run_interactive_mode(app):
                     history = app.get_user_history(user_id)
                     if history.count() > 0:
                         print(f"Review history ({history.count()} reviews):")
-                        history.select("product_id", "title", "rating", "review_date").show(truncate=50)
+                        history.select("product_id", "title", "category", "rating", "review_date").show(truncate=50)
                     else:
                         print("No review history found")
                 else:
                     print("Usage: user [user_id]")
                     print("Example: user CUST_00001")
+                    
+            elif cmd_type == 'copurchasers':
+                if len(command) > 2:
+                    user_id = command[1]
+                    product_id = command[2]
+                    print(f"Finding number of customers purchasing same product as user {user_id}...")
+                    count = app.get_copurchasers_count(user_id, product_id)
+                    print(f"Number of customers purchasing product {product_id} (excluding user {user_id}): {count}")
+                else:
+                    print("Usage: copurchasers [user_id] [product_id]")
+                    print("Example: copurchasers CUST_00001 014241543X")
                     
             elif cmd_type == 'info':
                 info = app.get_system_info()
@@ -163,11 +175,12 @@ def print_help():
     """Print enhanced help menu"""
     print("\nAVAILABLE COMMANDS:")
     print("  search best_sellers [category] [n]")
-    print("  search rating [operator] [rating]")
+    print("  search rating [operator] [rating] [category] [n]")
     print("  recommend [user_id] [n]")
     print("  similar [product_id] [n]")
     print("  product [product_id]")
     print("  user [user_id]")
+    print("  copurchasers [user_id] [product_id]")
     print("  stats")
     print("  info")
     print("  clear")
@@ -175,14 +188,15 @@ def print_help():
     print("  quit/exit")
     print("\nEXAMPLES:")
     print("  search best_sellers Books 10")
-    print("  search rating >= 4.5")
-    print("  recommend CUST_00001 5")
-    print("  similar 014241543X 8")
+    print("  search rating >= 4.5 Books 10")
+    print("  recommend CUST_00001 10")
+    print("  similar 014241543X 10")
     print("  product 014241543X")
     print("  user CUST_00001")
+    print("  copurchasers CUST_00001 014241543X")
 
 def handle_search_command(app, args):
-    """Handle enhanced search commands"""
+    """Handle enhanced search commands with category and count parameters"""
     if len(args) < 1:
         print("Usage: search [type] [params]")
         print("Types: best_sellers, rating")
@@ -194,33 +208,35 @@ def handle_search_command(app, args):
         if query_type == 'best_sellers':
             if len(args) >= 2:
                 category = args[1]
-                n = int(args[2]) if len(args) > 2 else 5
+                n = int(args[2]) if len(args) > 2 else 10
                 print(f"Finding top {n} bestsellers in {category}...")
                 results = app.execute_search_query('best_sellers', category=category, n=n)
                 if results.count() > 0:
-                    # FIXED: Added product_id to display
-                    results.select("product_id", "title", "sales_rank", "average_rating", "price").show(n, truncate=50)
+                    results.select("product_id", "title", "sales_rank", "average_rating", "review_count", "price").show(n, truncate=50)
                 else:
                     print("No results found")
             else:
-                print("Usage: search best_sellers [category] [n=5]")
+                print("Usage: search best_sellers [category] [n=10]")
                 print("Example: search best_sellers Books 10")
                 
         elif query_type == 'rating':
             if len(args) >= 3:
                 operator = args[1]
                 rating = float(args[2])
-                print(f"Finding books with rating {operator} {rating}...")
-                results = app.execute_search_query('rating', operator=operator, rating_threshold=rating)
+                category = args[3] if len(args) > 3 else None
+                n = int(args[4]) if len(args) > 4 else 10
+                
+                print(f"Finding books with rating {operator} {rating} in category {category}...")
+                results = app.execute_search_query('rating', operator=operator, rating_threshold=rating, 
+                                                 category=category, n=n)
                 if results.count() > 0:
-                    # FIXED: Added product_id to display
-                    results.select("product_id", "title", "average_rating", "review_count", "category").show(5, truncate=50)
+                    results.select("product_id", "title", "average_rating", "review_count", "category").show(n, truncate=50)
                 else:
                     print("No books found with that rating")
             else:
-                print("Usage: search rating [operator] [rating]")
+                print("Usage: search rating [operator] [rating] [category] [n]")
                 print("Operators: >, >=, =, <, <=")
-                print("Example: search rating >= 4.5")
+                print("Example: search rating >= 4.5 Books 10")
                 
         else:
             print(f"Unknown search type: {query_type}")
@@ -230,18 +246,22 @@ def handle_search_command(app, args):
         print(f"Search error: {e}")
 
 def run_demo_mode(app):
-    """Run demo mode with sample queries"""
+    """Run demo mode with sample queries including new features"""
     print("\n" + "="*50)
-    print("AMAZON RECOMMENDER SYSTEM - DEMO MODE")
+    print("AMAZON RECOMMENDER SYSTEM - ENHANCED DEMO MODE")
     print("="*50)
     
     demo_queries = [
         ("System Information", lambda: app.get_system_info()),
-        ("Top 5 Bestsellers in Books", lambda: app.execute_search_query('best_sellers', category='Books', n=5)),
-        ("Books with High Ratings (>=4.5)", lambda: app.execute_search_query('rating', operator='>=', rating_threshold=4.5)),
+        ("Top 10 Bestsellers in Books", lambda: app.execute_search_query('best_sellers', category='Books', n=10)),
+        ("Books with High Ratings (>=4.5)", 
+         lambda: app.execute_search_query('rating', operator='>=', rating_threshold=4.5, n=10)),
         ("Category Statistics", lambda: app.get_category_stats()),
-        ("Recommendations for CUST_00001", lambda: app.get_recommendations(user_id='CUST_00001', n=5)),
-        ("Books Similar to 014241543X", lambda: app.get_recommendations(product_id='014241543X', n=5)),
+        ("Recommendations for CUST_00001", lambda: app.get_recommendations(user_id='CUST_00001', n=10)),
+        ("Books Similar to 014241543X", lambda: app.get_recommendations(product_id='014241543X', n=10)),
+        ("User CUST_00001 Purchase History with Categories", lambda: app.get_user_history('CUST_00001')),
+        ("Co-purchasers for User CUST_00001 and Product 014241543X", 
+         lambda: print(f"Count: {app.get_copurchasers_count('CUST_00001', '014241543X')}")),
     ]
     
     for description, query_func in demo_queries:

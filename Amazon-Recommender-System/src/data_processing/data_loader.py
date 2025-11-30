@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class DataLoader:
     """
-    Force-working data loader that uses real Amazon data
+    Enhanced data loader that includes review count calculation
     """
     
     def __init__(self, spark: SparkSession):
@@ -16,23 +16,23 @@ class DataLoader:
     
     def load_data(self) -> Tuple[DataFrame, DataFrame]:
         """
-        Load real Amazon data with forced schema
+        Load real Amazon data with enhanced review count calculation
         """
-        logger.info("Loading real Amazon dataset with forced approach")
+        logger.info("Loading enhanced Amazon dataset with review counts")
         
         # Ensure dataset is downloaded before proceeding
         dataset_path = ensure_dataset_downloaded()
         logger.info(f"Using dataset: {dataset_path}")
         
-        # Force read the data with explicit schema handling
+        # Read the data with explicit schema handling
         raw_df = self.spark.read \
             .option("mode", "PERMISSIVE") \
             .option("columnNameOfCorruptRecord", "_corrupt_record") \
             .json(str(dataset_path))
         
-        # Force count to trigger full read
+        # Count to trigger full read
         record_count = raw_df.count()
-        logger.info(f"Force-loaded {record_count:,} records")
+        logger.info(f"Loaded {record_count:,} records")
         
         # Get available columns
         available_columns = raw_df.columns
@@ -43,6 +43,9 @@ class DataLoader:
         
         # Create reviews from the data
         reviews_df = self._create_reviews_from_data(products_df)
+        
+        # Calculate actual review counts and update products_df
+        products_df = self._calculate_review_counts(products_df, reviews_df)
         
         logger.info(f"SUCCESS: Created {products_df.count():,} products and {reviews_df.count():,} reviews")
         return products_df, reviews_df
@@ -126,7 +129,7 @@ class DataLoader:
         else:
             select_exprs.append(F.lit(0).alias("category_count"))
         
-        # Add review stats (will be updated)
+        # Add review stats (will be updated later with actual counts)
         select_exprs.extend([
             F.lit(0).alias("review_count"),
             F.lit(4.0).alias("average_rating")
@@ -138,7 +141,7 @@ class DataLoader:
             F.col("title").isNotNull()
         ).distinct()
         
-        # Force execution
+        # Execution
         product_count = products_df.count()
         logger.info(f"Created {product_count:,} products from real data")
         
@@ -198,3 +201,29 @@ class DataLoader:
         
         logger.info(f"Created {len(review_data):,} reviews for {len(product_samples)} products")
         return reviews_df
+    
+    def _calculate_review_counts(self, products_df: DataFrame, reviews_df: DataFrame) -> DataFrame:
+        """Calculate actual review counts and update products DataFrame"""
+        logger.info("Calculating actual review counts for products")
+        
+        # Calculate review counts per product
+        review_counts = reviews_df.groupBy("product_id").agg(
+            F.count("rating").alias("actual_review_count"),
+            F.avg("rating").alias("actual_avg_rating")
+        )
+        
+        # Join with products DataFrame and update review counts and ratings
+        products_df = products_df.join(
+            review_counts, 
+            "product_id", 
+            "left"
+        ).withColumn(
+            "review_count",
+            F.coalesce(F.col("actual_review_count"), F.lit(0))
+        ).withColumn(
+            "average_rating", 
+            F.coalesce(F.col("actual_avg_rating"), F.col("average_rating"))
+        ).drop("actual_review_count", "actual_avg_rating")
+        
+        logger.info("Review counts calculated and updated")
+        return products_df

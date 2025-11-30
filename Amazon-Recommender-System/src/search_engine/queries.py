@@ -30,22 +30,28 @@ class SearchQueries:
             raise ValueError(f"Unsupported operator: {operator}")
     
     @staticmethod
-    def products_by_rating(df: DataFrame, operator: str, rating_threshold: float) -> DataFrame:
+    def products_by_rating(df: DataFrame, operator: str, rating_threshold: float, n: int = 10) -> DataFrame:
         """
         Filter products by average rating
         """
         if operator == '>':
-            return df.filter(F.col("average_rating") > rating_threshold)
+            filtered_df = df.filter(F.col("average_rating") > rating_threshold)
         elif operator == '>=':
-            return df.filter(F.col("average_rating") >= rating_threshold)
+            filtered_df = df.filter(F.col("average_rating") >= rating_threshold)
         elif operator == '=':
-            return df.filter(F.col("average_rating") == rating_threshold)
+            filtered_df = df.filter(F.col("average_rating") == rating_threshold)
         elif operator == '<':
-            return df.filter(F.col("average_rating") < rating_threshold)
+            filtered_df = df.filter(F.col("average_rating") < rating_threshold)
         elif operator == '<=':
-            return df.filter(F.col("average_rating") <= rating_threshold)
+            filtered_df = df.filter(F.col("average_rating") <= rating_threshold)
         else:
             raise ValueError(f"Unsupported operator: {operator}")
+        
+        # Apply limit if specified
+        if n:
+            filtered_df = filtered_df.limit(n)
+            
+        return filtered_df
     
     @staticmethod
     def complex_queries(products_df: DataFrame, 

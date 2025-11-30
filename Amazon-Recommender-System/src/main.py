@@ -54,7 +54,7 @@ class AmazonRecommenderApp:
             raise
     
     def execute_search_query(self, query_type: str, **kwargs):
-        """Execute search query"""
+        """Execute search query with enhanced functionality"""
         return self.search_engine.search(query_type, **kwargs)
     
     def get_recommendations(self, user_id: str = None, product_id: str = None, n: int = 10):
@@ -75,7 +75,7 @@ class AmazonRecommenderApp:
         return self.search_engine.get_product_info(product_id)
     
     def get_user_history(self, user_id: str):
-        """Get user's review history"""
+        """Get user's review history with category information"""
         return self.search_engine.get_user_review_history(user_id)
     
     def get_system_info(self):
@@ -91,6 +91,10 @@ class AmazonRecommenderApp:
             "users": user_count,
             "categories": category_count
         }
+    
+    def get_copurchasers_count(self, user_id: str, product_id: str):
+        """Get number of customers purchasing the same product given user_id and product_id"""
+        return self.search_engine.get_copurchasers_count(user_id, product_id)
     
     def shutdown(self):
         """Shutdown application"""

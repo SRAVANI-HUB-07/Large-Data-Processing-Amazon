@@ -30,7 +30,8 @@ class SearchEngine:
             return self.queries.products_by_rating(
                 self.products_df,
                 kwargs['operator'],
-                kwargs['rating_threshold']
+                kwargs['rating_threshold'],
+                kwargs.get('n', 10)
             )
         
         elif query_type == "complex":
@@ -48,29 +49,39 @@ class SearchEngine:
     def get_product_info(self, product_id: str) -> DataFrame:
         """
         Get detailed information about a specific product
-        Returns all available product information
+        Returns all available product information including review count
         """
-        return self.products_df.filter(F.col("product_id") == product_id)
+        product_info = self.products_df.filter(F.col("product_id") == product_id)
+        
+        # Calculate review count for the product
+        review_count = self.reviews_df.filter(F.col("product_id") == product_id).count()
+        
+        # Add review count column
+        return product_info.withColumn("review_count", F.lit(review_count))
     
     def get_user_review_history(self, user_id: str) -> DataFrame:
         """
-        Get all reviews by a specific user with product details
+        Get all reviews by a specific user with product details including category
         """
         user_reviews = self.reviews_df.filter(F.col("customer_id") == user_id)
         
         if user_reviews.count() == 0:
-            # Return empty DataFrame with proper schema
-            return self.reviews_df.filter(F.col("customer_id") == "none")
+            # Return empty DataFrame with proper schema including category
+            return self.reviews_df.filter(F.col("customer_id") == "none").join(
+                self.products_df.select("product_id", "title", "category"), 
+                "product_id", 
+                "left"
+            )
         
-        # Join with products to get product details
+        # Join with products to get product details including category
         return user_reviews.join(
-            self.products_df, 
+            self.products_df.select("product_id", "title", "category"), 
             "product_id", 
             "inner"
         ).select(
             "product_id", 
             "title", 
-            "category", 
+            "category",
             "rating", 
             "review_date", 
             "helpful_votes",
@@ -119,7 +130,7 @@ class SearchEngine:
         )
         
         if target_product.count() == 0:
-            return self.products_df.limit(0)  # Return empty
+            return self.products_df.limit(0)
         
         target_row = target_product.first()
         target_category = target_row["category"]
@@ -138,12 +149,28 @@ class SearchEngine:
         
         return similar_products
     
+    def get_copurchasers_count(self, user_id: str, product_id: str) -> int:
+        """
+        Get the number of customers purchasing the same product given user_id and product_id
+        If dataset has any number give that else give zero
+        """
+        try:
+            # Count distinct customers who purchased the same product, excluding the given user
+            count = self.reviews_df.filter(
+                (F.col("product_id") == product_id) & 
+                (F.col("customer_id") != user_id)
+            ).select("customer_id").distinct().count()
+            
+            return count
+        except Exception:
+            return 0
+    
     def get_popular_products(self, n: int = 10) -> DataFrame:
         """
         Get popular products based on sales rank and rating
         """
         return self.products_df.filter(
-            F.col("sales_rank") < 1000000  # Only reasonably ranked products
+            F.col("sales_rank") < 1000000
         ).orderBy(
             F.asc("sales_rank"),
             F.desc("average_rating")
