@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Enhanced Amazon Recommender System
+Enhanced Amazon Recommender System with Collaborative Filtering
 """
 
 import os
@@ -17,6 +17,7 @@ from config.spark_config import create_spark_session, stop_spark_session
 from src.data_processing.data_loader import DataLoader
 from src.search_engine.search import SearchEngine
 from src.recommender.algorithms import HybridRecommender
+from src.recommender.collaborative_filtering import CollaborativeFiltering
 from src.utils.helpers import setup_logging
 
 class AmazonRecommenderApp:
@@ -29,6 +30,7 @@ class AmazonRecommenderApp:
         self.reviews_df = None
         self.search_engine = None
         self.recommender = None
+        self.collab_filter = None
         
     def initialize_data(self):
         """Initialize data and components"""
@@ -44,6 +46,11 @@ class AmazonRecommenderApp:
             # Initialize components
             self.search_engine = SearchEngine(self.products_df, self.reviews_df)
             self.recommender = HybridRecommender(self.spark, self.products_df, self.reviews_df)
+            self.collab_filter = CollaborativeFiltering(self.spark, self.products_df, self.reviews_df)
+            
+            # Train collaborative filtering model
+            self.logger.info("Training collaborative filtering model...")
+            self.collab_filter.train_model()
             
             self.logger.info("Amazon Recommender System initialized successfully")
             
@@ -58,13 +65,26 @@ class AmazonRecommenderApp:
         return self.search_engine.search(query_type, **kwargs)
     
     def get_recommendations(self, user_id: str = None, product_id: str = None, n: int = 10):
-        """Get recommendations"""
+        """Get recommendations using hybrid approach"""
         if user_id:
             return self.recommender.hybrid_recommendations(user_id, n)
         elif product_id:
             return self.recommender.similar_products(product_id, n)
         else:
             return self.recommender.popularity_based_recommendations(n=n)
+    
+    def get_collaborative_recommendations(self, user_id: str = None, product_id: str = None, n: int = 10):
+        """Get recommendations using collaborative filtering"""
+        if user_id:
+            return self.collab_filter.recommend_for_user(user_id, n)
+        elif product_id:
+            return self.collab_filter.get_similar_products(product_id, n)
+        else:
+            return self.collab_filter.get_popular_products(n)
+    
+    def get_also_bought(self, product_id: str, n: int = 10):
+        """Get 'customers who bought this also bought' recommendations"""
+        return self.collab_filter.get_also_bought_products(product_id, n)
     
     def get_category_stats(self):
         """Get category statistics"""

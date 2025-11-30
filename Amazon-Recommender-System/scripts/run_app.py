@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Enhanced Run script for Amazon Recommender System
+Enhanced Run script for Amazon Recommender System with Collaborative Filtering
 """
 
 import sys
@@ -49,7 +49,7 @@ def main():
         app.shutdown()
 
 def run_interactive_mode(app):
-    """Run enhanced interactive mode"""
+    """Run enhanced interactive mode with collaborative filtering"""
     print("\n" + "="*60)
     print("Amazon Recommender System - Enhanced Interactive Mode")
     print("="*60)
@@ -77,7 +77,7 @@ def run_interactive_mode(app):
                 if len(command) > 1:
                     user_id = command[1]
                     n = int(command[2]) if len(command) > 2 else 10
-                    print(f"Getting recommendations for user {user_id}...")
+                    print(f"Getting hybrid recommendations for user {user_id}...")
                     recs = app.get_recommendations(user_id=user_id, n=n)
                     if recs.count() > 0:
                         print(f"Recommended {recs.count()} books:")
@@ -87,6 +87,36 @@ def run_interactive_mode(app):
                 else:
                     print("Usage: recommend [user_id] [n=10]")
                     print("Example: recommend CUST_00001 10")
+                    
+            elif cmd_type == 'collab':
+                if len(command) > 1:
+                    user_id = command[1]
+                    n = int(command[2]) if len(command) > 2 else 10
+                    print(f"Getting collaborative recommendations for user {user_id}...")
+                    recs = app.get_collaborative_recommendations(user_id=user_id, n=n)
+                    if recs.count() > 0:
+                        print(f"Collaborative recommendations ({recs.count()} books):")
+                        recs.select("product_id", "title", "category", "recommendation_score", "average_rating").show(n, truncate=50)
+                    else:
+                        print("No collaborative recommendations found")
+                else:
+                    print("Usage: collab [user_id] [n=10]")
+                    print("Example: collab CUST_00001 10")
+                    
+            elif cmd_type == 'also_bought':
+                if len(command) > 1:
+                    product_id = command[1]
+                    n = int(command[2]) if len(command) > 2 else 10
+                    print(f"Finding products also bought with {product_id}...")
+                    recs = app.get_also_bought(product_id, n)
+                    if recs.count() > 0:
+                        print(f"Customers who bought this also bought ({recs.count()} books):")
+                        recs.select("product_id", "title", "category", "similarity_score", "average_rating").show(n, truncate=50)
+                    else:
+                        print("No 'also bought' recommendations found")
+                else:
+                    print("Usage: also_bought [product_id] [n=10]")
+                    print("Example: also_bought 014241543X 10")
                     
             elif cmd_type == 'similar':
                 if len(command) > 1:
@@ -147,6 +177,13 @@ def run_interactive_mode(app):
                     print("Usage: copurchasers [user_id] [product_id]")
                     print("Example: copurchasers CUST_00001 014241543X")
                     
+            elif cmd_type == 'eval_collab':
+                print("Evaluating collaborative filtering model...")
+                metrics = app.collab_filter.evaluate_model()
+                print("\nCollaborative Filtering Evaluation Results:")
+                for metric, value in metrics.items():
+                    print(f"  {metric}: {value}")
+                    
             elif cmd_type == 'info':
                 info = app.get_system_info()
                 print("\n" + "="*40)
@@ -156,6 +193,7 @@ def run_interactive_mode(app):
                 print(f"Total Reviews: {info['reviews']:,}")
                 print(f"Unique Users: {info['users']:,}")
                 print(f"Categories: {info['categories']:,}")
+                print(f"Collaborative Filtering: {'Trained' if app.collab_filter.trained else 'Not Trained'}")
                 
             elif cmd_type == 'clear':
                 os.system('cls' if os.name == 'nt' else 'clear')
@@ -172,15 +210,18 @@ def run_interactive_mode(app):
             traceback.print_exc()
 
 def print_help():
-    """Print enhanced help menu"""
+    """Print enhanced help menu with collaborative filtering commands"""
     print("\nAVAILABLE COMMANDS:")
     print("  search best_sellers [category] [n]")
     print("  search rating [operator] [rating] [category] [n]")
-    print("  recommend [user_id] [n]")
-    print("  similar [product_id] [n]")
+    print("  recommend [user_id] [n]          - Hybrid recommendations")
+    print("  collab [user_id] [n]             - Collaborative filtering")
+    print("  also_bought [product_id] [n]     - Customers also bought")
+    print("  similar [product_id] [n]         - Similar products")
     print("  product [product_id]")
     print("  user [user_id]")
     print("  copurchasers [user_id] [product_id]")
+    print("  eval_collab                      - Evaluate collaborative model")
     print("  stats")
     print("  info")
     print("  clear")
@@ -190,6 +231,8 @@ def print_help():
     print("  search best_sellers Books 10")
     print("  search rating >= 4.5 Books 10")
     print("  recommend CUST_00001 10")
+    print("  collab CUST_00001 10")
+    print("  also_bought 014241543X 10")
     print("  similar 014241543X 10")
     print("  product 014241543X")
     print("  user CUST_00001")
@@ -246,7 +289,7 @@ def handle_search_command(app, args):
         print(f"Search error: {e}")
 
 def run_demo_mode(app):
-    """Run demo mode with sample queries including new features"""
+    """Run demo mode with sample queries including collaborative filtering"""
     print("\n" + "="*50)
     print("AMAZON RECOMMENDER SYSTEM - ENHANCED DEMO MODE")
     print("="*50)
@@ -257,11 +300,14 @@ def run_demo_mode(app):
         ("Books with High Ratings (>=4.5)", 
          lambda: app.execute_search_query('rating', operator='>=', rating_threshold=4.5, n=10)),
         ("Category Statistics", lambda: app.get_category_stats()),
-        ("Recommendations for CUST_00001", lambda: app.get_recommendations(user_id='CUST_00001', n=10)),
+        ("Hybrid Recommendations for CUST_00001", lambda: app.get_recommendations(user_id='CUST_00001', n=10)),
+        ("Collaborative Recommendations for CUST_00001", lambda: app.get_collaborative_recommendations(user_id='CUST_00001', n=10)),
+        ("Customers who bought 014241543X also bought", lambda: app.get_also_bought('014241543X', 10)),
         ("Books Similar to 014241543X", lambda: app.get_recommendations(product_id='014241543X', n=10)),
         ("User CUST_00001 Purchase History with Categories", lambda: app.get_user_history('CUST_00001')),
         ("Co-purchasers for User CUST_00001 and Product 014241543X", 
          lambda: print(f"Count: {app.get_copurchasers_count('CUST_00001', '014241543X')}")),
+        ("Collaborative Filtering Evaluation", lambda: app.collab_filter.evaluate_model()),
     ]
     
     for description, query_func in demo_queries:
@@ -270,6 +316,9 @@ def run_demo_mode(app):
             result = query_func()
             if hasattr(result, 'show'):
                 result.show(truncate=50)
+            elif isinstance(result, dict):
+                for key, value in result.items():
+                    print(f"  {key}: {value}")
             else:
                 print(result)
             input("\nPress Enter to continue...")
